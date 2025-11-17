@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Shaka Player Demo</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.8/shaka-player.compiled.js"></script>
+</head>
+
+<body style="background:#111; color:white;">
+  <h2>Live Stream Player (MPD)</h2>
+
+  <video id="video" width="100%" controls autoplay></video>
+
+  <script>
+    async function loadStream() {
+      const apiUrl = "https://app.swaxnet.xyz/api/mpd-url";
+
+      // DATA UNAYOTUMA KWA API
+      const formData = new URLSearchParams();
+      formData.append("channelId", "CH-3974c2cd-9ec4-4d03-82b1-9c993973e487");
+      formData.append("slug", "AzamSport1");
+
+      // REQUEST KWA API
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: formData.toString()
+      });
+
+      const data = await response.json();
+
+      console.log("API Response:", data);
+
+      const mpdUrl = data.mpdUrl || data.url || data.stream || null;
+
+      if (!mpdUrl) {
+        alert("Hakuna MPD URL imerudi kutoka kwa API!");
+        return;
+      }
+
+      // SHAKA PLAYER
+      const video = document.getElementById("video");
+      const player = new shaka.Player(video);
+
+      player.addEventListener("error", (e) => {
+        console.error("Shaka Error:", e.detail);
+      });
+
+      try {
+        await player.load(mpdUrl);
+        console.log("Playing:", mpdUrl);
+      } catch (e) {
+        console.error("Load Error:", e);
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", loadStream);
+  </script>
+
+</body>
+</html>
