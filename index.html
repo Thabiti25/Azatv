@@ -2,9 +2,8 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>SwaxNet Smooth DRM Player</title>
+  <title>SwaxNet Dynamic Live Player</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.8/shaka-player.compiled.js"></script>
-
   <style>
     body { background:#111; color:white; font-family:Arial; padding:20px; }
     .card { background:#1d1d1d; padding:15px; border-radius:8px; margin-bottom:15px; }
@@ -17,8 +16,7 @@
 </head>
 
 <body>
-
-  <h2>SwaxNet Smooth DRM Live Player</h2>
+  <h2>SwaxNet Dynamic Live Player</h2>
 
   <div class="card">
     <label>Channel ID</label>
@@ -27,17 +25,17 @@
     <label>Slug</label>
     <input id="slug" value="AzamSport1">
 
-    <button onclick="playStream()">PLAY CHANNEL</button>
+    <button onclick="startStream()">PLAY CHANNEL</button>
   </div>
 
   <video id="video" controls autoplay></video>
   <div id="status">Status: idle</div>
 
 <script>
-async function playStream() {
-  const statusEl = document.getElementById('status');
-  statusEl.textContent = 'Status: loading stream...';
+let player;
+let refreshInterval = null;
 
+async function fetchMPD() {
   const apiUrl = "https://app.swaxnet.xyz/api/mpd-url";
   const channelId = document.getElementById("channelId").value;
   const slug = document.getElementById("slug").value;
@@ -46,53 +44,55 @@ async function playStream() {
   formData.append("channelId", channelId);
   formData.append("slug", slug);
 
-  try {
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: {
-        "Authorization": "Bearer 51b969b5ddee963de6c75686eb75adfd5709f31fd04335ee0a2654498868",
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: formData.toString()
-    });
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    headers: {
+      "Authorization": "Bearer 51b969b5ddee963de6c75686eb75adfd5709f31fd04335ee0a2654498868",
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: formData.toString()
+  });
 
-    const data = await response.json();
-    console.log("API Response:", data);
+  const data = await response.json();
+  console.log("API Response:", data);
 
-    const mpdUrl =
-      data.mpdUrl ||
-      data.url ||
-      data.stream ||
-      data.source ||
-      (data.data && data.data.mpdUrl) ||
-      null;
+  const mpdUrl =
+    data.mpdUrl ||
+    data.url ||
+    data.stream ||
+    data.source ||
+    (data.data && data.data.mpdUrl) ||
+    null;
 
-    if (!mpdUrl) {
-      alert("API haikurudisha MPD URL. Angalia console.");
-      statusEl.textContent = 'Status: error, no MPD';
-      return;
-    }
+  if (!mpdUrl) throw new Error("No MPD URL returned from API");
 
-    const video = document.getElementById("video");
-    video.preload = "auto";
-    video.playsInline = true;
-    video.autoplay = true;
+  return mpdUrl;
+}
 
-    const player = new shaka.Player(video);
+async function startStream() {
+  const statusEl = document.getElementById('status');
+  statusEl.textContent = 'Status: loading stream...';
 
-    // === DRM CONFIGURATION ===
+  const video = document.getElementById("video");
+  video.preload = "auto";
+  video.playsInline = true;
+  video.autoplay = true;
+
+  if (!player) {
+    player = new shaka.Player(video);
+
+    // DRM configuration
     player.configure({
       drm: {
         servers: {
-          "com.widevine.alpha":
-            "https://azy4sj9b.anycast.nagra.com/AZY4SJ9B/wvls/contentlicenseservice/v1/licenses"
+          "com.widevine.alpha": "https://azy4sj9b.anycast.nagra.com/AZY4SJ9B/wvls/contentlicenseservice/v1/licenses"
         }
       },
       streaming: {
-        retryParameters: { maxAttempts:5, baseDelay:1000, backoffFactor:2, fuzzFactor:0.5 },
-        bufferingGoal:30,    // seconds of buffer
-        rebufferingGoal:15,  // minimum buffer to continue playing
-        smallGapLimit:0.5
+        bufferingGoal: 30,
+        rebufferingGoal: 15,
+        smallGapLimit: 0.5,
+        retryParameters: { maxAttempts:5, baseDelay:1000, backoffFactor:2, fuzzFactor:0.5 }
       },
       manifest: {
         retryParameters: { maxAttempts:5, baseDelay:1000, backoffFactor:2, fuzzFactor:0.5 }
@@ -100,12 +100,7 @@ async function playStream() {
       abr: {
         enabled:true,
         defaultBandwidthEstimate:3e6,
-        restrictions: {
-          maxWidth:1920,
-          maxHeight:1080,
-          maxBandwidth:5e6,
-          minBandwidth:500e3
-        }
+        restrictions: { maxWidth:1920, maxHeight:1080, maxBandwidth:5e6, minBandwidth:500e3 }
       }
     });
 
@@ -122,22 +117,35 @@ async function playStream() {
     video.addEventListener('waiting', () => { statusEl.textContent = 'Status: buffering…'; });
     video.addEventListener('playing', () => { statusEl.textContent = 'Status: playing'; });
     video.addEventListener('ended', () => { statusEl.textContent = 'Status: ended'; });
-
     player.addEventListener("error", e => {
       console.error("Shaka Player Error:", e.detail);
       statusEl.textContent = 'Status: error, see console';
     });
+  }
 
+  try {
+    const mpdUrl = await fetchMPD();
     await player.load(mpdUrl);
     console.log("Playing:", mpdUrl);
     statusEl.textContent = 'Status: playing';
 
+    // Auto-refresh MPD every 45 seconds (or whatever token expiry time)
+    if (refreshInterval) clearInterval(refreshInterval);
+    refreshInterval = setInterval(async () => {
+      try {
+        const newMPD = await fetchMPD();
+        await player.load(newMPD);
+        console.log("Refreshed MPD URL:", newMPD);
+      } catch (err) {
+        console.error("Failed to refresh MPD:", err);
+      }
+    }, 45000); // adjust based on token expiry
+
   } catch (err) {
-    console.error("Fetch/Load Error:", err);
+    console.error("Failed to load stream:", err);
     statusEl.textContent = 'Status: error, see console';
   }
 }
 </script>
-
 </body>
 </html>
