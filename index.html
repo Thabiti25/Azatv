@@ -2,36 +2,26 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>AUTO Token Refresh Player</title>
+  <title>Shaka Player Auto Refresh Token</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/shaka-player.compiled.js"></script>
   <style>
-    body { background:#111; margin:0; display:flex; align-items:center; justify-content:center; height:100vh; }
+    body { margin:0; background:#111; display:flex; justify-content:center; align-items:center; height:100vh; }
     video { width:90%; background:black; }
   </style>
 </head>
 <body>
-
 <video id="video" controls autoplay></video>
 
 <script>
-
-// --------------------------------
-// CONFIG ONLY — NOTHING HARD CODED
-// --------------------------------
 const API_URL = "https://app.swaxnet.xyz/api/mpd-url";
 const BEARER = "51b969b5ddee963de6c75686eb75adfd5709f31fd04335ee0a2654498868";
-
-const CHANNEL_ID = "CH-3974c2cd-9ec4-4d03-82b1-9c993973e487"; 
+const CHANNEL_ID = "CH-3974c2cd-9ec4-4d03-82b1-9c993973e487";
 const SLUG = "AzamSport1";
 
 let player;
-let streamData = {};  // full API response (mpd, license, token)
+let streamData = {};
 
-
-// --------------------------------
-// FUNCTION TO FETCH STREAM DATA
-// --------------------------------
-async function loadFromAPI() {
+async function fetchStreamData() {
     const formData = new URLSearchParams();
     formData.append("channelId", CHANNEL_ID);
     formData.append("slug", SLUG);
@@ -46,66 +36,63 @@ async function loadFromAPI() {
     });
 
     streamData = await res.json();
-
-    console.log("UPDATED DATA FROM API:", streamData);
+    console.log("New stream data:", streamData);
 }
 
-
-// --------------------------------
-// Initialize Shaka Player
-// --------------------------------
 async function initPlayer() {
     const video = document.getElementById("video");
     player = new shaka.Player(video);
 
-    // Get initial stream info
-    await loadFromAPI();
+    await fetchStreamData();
 
-    // Attach DRM token automatically
+    // Add token to license request
     player.getNetworkingEngine().registerRequestFilter((type, request) => {
-        if (type === shaka.net.NetworkingEngine.RequestType.LICENSE) {
+        if(type === shaka.net.NetworkingEngine.RequestType.LICENSE){
             request.headers["Authorization"] = "Bearer " + streamData.authXmlToken;
         }
     });
 
-    // DRM + LICENSE URL FROM API
+    // Configure DRM with licenseUrl from API
     player.configure({
         drm: {
             servers: {
-                "com.widevine.alpha": streamData.licenseUrl[0]
+                'com.widevine.alpha': streamData.licenseUrl[0]
             }
         }
     });
 
-    // Load MPD from API
+    // Load MPD
     await player.load(streamData.mpdUrl[0]);
+    console.log("Stream loaded!");
 
-    console.log("Stream Loaded!");
-    
-    // Start auto-refresh every 60 seconds
-    setInterval(refreshData, 60000);
+    // Auto-refresh token every 60 seconds
+    setInterval(refreshToken, 60000);
 }
 
+async function refreshToken() {
+    console.log("Refreshing token...");
+    await fetchStreamData();
 
-// --------------------------------
-// AUTO REFRESH DATA — NO RELOAD
-// --------------------------------
-async function refreshData() {
-    console.log("AUTO REFRESHING TOKEN & MPD FROM API...");
+    // Update DRM server token
+    player.getNetworkingEngine().registerRequestFilter((type, request) => {
+        if(type === shaka.net.NetworkingEngine.RequestType.LICENSE){
+            request.headers["Authorization"] = "Bearer " + streamData.authXmlToken;
+        }
+    });
 
-    await loadFromAPI();
+    // Optionally update license URL (if ever changed)
+    player.configure({
+        drm: {
+            servers: {
+                'com.widevine.alpha': streamData.licenseUrl[0]
+            }
+        }
+    });
 
-    // Update DRM token
-    player.getConfiguration().drm.servers["com.widevine.alpha"] = streamData.licenseUrl[0];
-
-    console.log("Token & License Updated.");
+    console.log("Token & license updated!");
 }
 
-
-// --------------------------------
 document.addEventListener("DOMContentLoaded", initPlayer);
-
 </script>
-
 </body>
 </html>
