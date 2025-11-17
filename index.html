@@ -6,35 +6,12 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.8/shaka-player.compiled.js"></script>
 
   <style>
-    body {
-      background: #0e0e0e;
-      color: white;
-      font-family: Arial;
-      padding: 20px;
-    }
-    .card {
-      background: #1c1c1c;
-      padding: 15px;
-      border-radius: 8px;
-      margin-bottom: 10px;
-    }
-    button {
-      background: #007bff;
-      border: none;
-      padding: 10px 15px;
-      color: white;
-      border-radius: 5px;
-      cursor: pointer;
-    }
-    button:hover {
-      background: #0056c7;
-    }
-    video {
-      width: 100%;
-      margin-top: 20px;
-      border-radius: 8px;
-      background: black;
-    }
+    body { background:#111; color:white; font-family:Arial; padding:20px; }
+    .card { background:#1d1d1d; padding:15px; border-radius:10px; margin-bottom:20px; }
+    input, button { padding:10px; width:100%; border-radius:8px; margin-top:8px; }
+    button { background:#007bff; border:none; color:white; cursor:pointer; }
+    button:hover { background:#0060cc; }
+    video { width:100%; margin-top:20px; background:black; border-radius:10px; }
   </style>
 </head>
 
@@ -43,16 +20,12 @@
   <h2>SwaxNet Live Player</h2>
 
   <div class="card">
-    <label>Channel ID</label><br>
-    <input id="channelId" type="text" style="width:100%;padding:8px;margin-top:5px;"
-           value="CH-3974c2cd-9ec4-4d03-82b1-9c993973e487">
+    <label>Channel ID</label>
+    <input id="channelId" value="CH-3974c2cd-9ec4-4d03-82b1-9c993973e487">
 
-    <br><br>
-    <label>Slug</label><br>
-    <input id="slug" type="text" style="width:100%;padding:8px;margin-top:5px;"
-           value="AzamSport1">
+    <label>Slug</label>
+    <input id="slug" value="AzamSport1">
 
-    <br><br>
     <button onclick="loadStream()">Play Channel</button>
   </div>
 
@@ -65,11 +38,6 @@
       const channelId = document.getElementById("channelId").value;
       const slug = document.getElementById("slug").value;
 
-      if (!channelId || !slug) {
-        alert("Weka ChannelId na Slug!");
-        return;
-      }
-
       const formData = new URLSearchParams();
       formData.append("channelId", channelId);
       formData.append("slug", slug);
@@ -77,6 +45,7 @@
       let response = await fetch(apiUrl, {
         method: "POST",
         headers: {
+          "Authorization": "Bearer 51b969b5ddee963de6c75686eb75adfd5709f31fd04335ee0a2654498868",
           "Content-Type": "application/x-www-form-urlencoded"
         },
         body: formData.toString()
@@ -90,25 +59,22 @@
         data.url ||
         data.stream ||
         data.source ||
+        (data.data && data.data.mpdUrl) ||
         null;
 
       if (!mpdUrl) {
-        alert("Hakuna MPD URL imerudi!");
+        alert("API IMERUDI BILA MPD URL. Angalia response kwenye console.");
         return;
       }
 
       const video = document.getElementById("video");
       const player = new shaka.Player(video);
 
-      player.addEventListener("error", e => {
-        console.error("Shaka Error", e.detail);
-      });
-
       try {
         await player.load(mpdUrl);
         console.log("Playing:", mpdUrl);
       } catch (err) {
-        console.error("Load Failed:", err);
+        console.error("Shaka Load Error:", err);
       }
     }
   </script>
