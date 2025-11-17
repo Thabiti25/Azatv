@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>Shaka Player Auto Refresh Token</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/shaka-player.compiled.js"></script>
-  <style>
-    body { margin:0; background:#111; display:flex; justify-content:center; align-items:center; height:100vh; }
-    video { width:90%; background:black; }
-  </style>
+<meta charset="utf-8">
+<title>Shaka Player Auto-Refresh</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/shaka-player.compiled.js"></script>
+<style>
+  body { margin:0; background:#111; display:flex; justify-content:center; align-items:center; height:100vh; }
+  video { width:90%; background:black; }
+</style>
 </head>
 <body>
 <video id="video" controls autoplay></video>
@@ -36,7 +36,7 @@ async function fetchStreamData() {
     });
 
     streamData = await res.json();
-    console.log("New stream data:", streamData);
+    console.log("Fetched stream data:", streamData);
 }
 
 async function initPlayer() {
@@ -45,14 +45,14 @@ async function initPlayer() {
 
     await fetchStreamData();
 
-    // Add token to license request
+    // Attach token for license requests
     player.getNetworkingEngine().registerRequestFilter((type, request) => {
         if(type === shaka.net.NetworkingEngine.RequestType.LICENSE){
             request.headers["Authorization"] = "Bearer " + streamData.authXmlToken;
         }
     });
 
-    // Configure DRM with licenseUrl from API
+    // Configure DRM using licenseUrl from API
     player.configure({
         drm: {
             servers: {
@@ -61,26 +61,26 @@ async function initPlayer() {
         }
     });
 
-    // Load MPD
     await player.load(streamData.mpdUrl[0]);
     console.log("Stream loaded!");
 
-    // Auto-refresh token every 60 seconds
-    setInterval(refreshToken, 60000);
+    // Auto-refresh token & mpd every 60 seconds
+    setInterval(refreshStream, 60000);
 }
 
-async function refreshToken() {
-    console.log("Refreshing token...");
+async function refreshStream() {
+    console.log("Refreshing stream data...");
+
     await fetchStreamData();
 
-    // Update DRM server token
+    // Update token for future license requests
     player.getNetworkingEngine().registerRequestFilter((type, request) => {
         if(type === shaka.net.NetworkingEngine.RequestType.LICENSE){
             request.headers["Authorization"] = "Bearer " + streamData.authXmlToken;
         }
     });
 
-    // Optionally update license URL (if ever changed)
+    // Update licenseUrl if ever changed
     player.configure({
         drm: {
             servers: {
