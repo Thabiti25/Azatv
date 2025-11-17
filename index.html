@@ -2,22 +2,23 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>SwaxNet DRM Live Player</title>
+  <title>SwaxNet Smooth DRM Player</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.8/shaka-player.compiled.js"></script>
 
   <style>
-    body { background:#111; color:white; padding:20px; font-family:Arial; }
+    body { background:#111; color:white; font-family:Arial; padding:20px; }
     .card { background:#1d1d1d; padding:15px; border-radius:8px; margin-bottom:15px; }
     input, button { padding:10px; width:100%; border-radius:8px; margin-top:10px; }
     button { background:#007bff; border:none; color:white; cursor:pointer; }
     button:hover { background:#0056cc; }
     video { width:100%; margin-top:20px; border-radius:10px; background:black; }
+    #status { margin-top:10px; font-size:14px; color:#ccc; }
   </style>
 </head>
 
 <body>
 
-  <h2>SwaxNet DRM Live Player</h2>
+  <h2>SwaxNet Smooth DRM Live Player</h2>
 
   <div class="card">
     <label>Channel ID</label>
@@ -30,11 +31,14 @@
   </div>
 
   <video id="video" controls autoplay></video>
+  <div id="status">Status: idle</div>
 
 <script>
 async function playStream() {
-  const apiUrl = "https://app.swaxnet.xyz/api/mpd-url";
+  const statusEl = document.getElementById('status');
+  statusEl.textContent = 'Status: loading stream...';
 
+  const apiUrl = "https://app.swaxnet.xyz/api/mpd-url";
   const channelId = document.getElementById("channelId").value;
   const slug = document.getElementById("slug").value;
 
@@ -42,62 +46,95 @@ async function playStream() {
   formData.append("channelId", channelId);
   formData.append("slug", slug);
 
-  let response = await fetch(apiUrl, {
-    method: "POST",
-    headers: {
-      "Authorization": "Bearer 51b969b5ddee963de6c75686eb75adfd5709f31fd04335ee0a2654498868",
-      "Content-Type": "application/x-www-form-urlencoded"
-    },
-    body: formData.toString()
-  });
-
-  const data = await response.json();
-  console.log("API Response:", data);
-
-  const mpdUrl =
-    data.mpdUrl ||
-    data.url ||
-    data.stream ||
-    data.source ||
-    (data.data && data.data.mpdUrl) ||
-    null;
-
-  if (!mpdUrl) {
-    alert("API haikurudisha MPD URL. Angalia console.");
-    return;
-  }
-
-  const video = document.getElementById("video");
-  const player = new shaka.Player(video);
-
-  // === DRM CONFIGURATION (VERY IMPORTANT) ===
-  player.configure({
-    drm: {
-      servers: {
-        "com.widevine.alpha":
-          "https://azy4sj9b.anycast.nagra.com/AZY4SJ9B/wvls/contentlicenseservice/v1/licenses"
+  try {
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer 51b969b5ddee963de6c75686eb75adfd5709f31fd04335ee0a2654498868",
+        "Content-Type": "application/x-www-form-urlencoded"
       },
-      advanced: {
-        "com.widevine.alpha": {
-          "serverCertificate": null
+      body: formData.toString()
+    });
+
+    const data = await response.json();
+    console.log("API Response:", data);
+
+    const mpdUrl =
+      data.mpdUrl ||
+      data.url ||
+      data.stream ||
+      data.source ||
+      (data.data && data.data.mpdUrl) ||
+      null;
+
+    if (!mpdUrl) {
+      alert("API haikurudisha MPD URL. Angalia console.");
+      statusEl.textContent = 'Status: error, no MPD';
+      return;
+    }
+
+    const video = document.getElementById("video");
+    video.preload = "auto";
+    video.playsInline = true;
+    video.autoplay = true;
+
+    const player = new shaka.Player(video);
+
+    // === DRM CONFIGURATION ===
+    player.configure({
+      drm: {
+        servers: {
+          "com.widevine.alpha":
+            "https://azy4sj9b.anycast.nagra.com/AZY4SJ9B/wvls/contentlicenseservice/v1/licenses"
+        }
+      },
+      streaming: {
+        retryParameters: { maxAttempts:5, baseDelay:1000, backoffFactor:2, fuzzFactor:0.5 },
+        bufferingGoal:30,    // seconds of buffer
+        rebufferingGoal:15,  // minimum buffer to continue playing
+        smallGapLimit:0.5
+      },
+      manifest: {
+        retryParameters: { maxAttempts:5, baseDelay:1000, backoffFactor:2, fuzzFactor:0.5 }
+      },
+      abr: {
+        enabled:true,
+        defaultBandwidthEstimate:3e6,
+        restrictions: {
+          maxWidth:1920,
+          maxHeight:1080,
+          maxBandwidth:5e6,
+          minBandwidth:500e3
         }
       }
-    }
-  });
+    });
 
-  player.getNetworkingEngine().registerRequestFilter((type, request) => {
-    if (type === shaka.net.NetworkingEngine.RequestType.LICENSE) {
-      request.headers["Authorization"] =
-        "Bearer 51b969b5ddee963de6c75686eb75adfd5709f31fd04335ee0a2654498868";
-      request.headers["Content-Type"] = "application/octet-stream";
-    }
-  });
+    // Add Bearer token to license requests
+    player.getNetworkingEngine().registerRequestFilter((type, request) => {
+      if (type === shaka.net.NetworkingEngine.RequestType.LICENSE) {
+        request.headers["Authorization"] =
+          "Bearer 51b969b5ddee963de6c75686eb75adfd5709f31fd04335ee0a2654498868";
+        request.headers["Content-Type"] = "application/octet-stream";
+      }
+    });
 
-  try {
+    // Event listeners
+    video.addEventListener('waiting', () => { statusEl.textContent = 'Status: buffering…'; });
+    video.addEventListener('playing', () => { statusEl.textContent = 'Status: playing'; });
+    video.addEventListener('ended', () => { statusEl.textContent = 'Status: ended'; });
+
+    player.addEventListener("error", e => {
+      console.error("Shaka Player Error:", e.detail);
+      statusEl.textContent = 'Status: error, see console';
+    });
+
     await player.load(mpdUrl);
     console.log("Playing:", mpdUrl);
+    statusEl.textContent = 'Status: playing';
+
   } catch (err) {
-    console.error("Shaka Player Error:", err);
+    console.error("Fetch/Load Error:", err);
+    statusEl.textContent = 'Status: error, see console';
   }
 }
 </script>
