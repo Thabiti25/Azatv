@@ -16,20 +16,23 @@
 <script>
 
 // -------------------------------
-// API CONFIG
+// CONFIG
 // -------------------------------
 const API_URL = "https://app.swaxnet.xyz/api/mpd-url";
 const BEARER_TOKEN = "51b969b5ddee963de6c75686eb75adfd5709f31fd04335ee0a2654498868";
+
 const CHANNEL_ID = "CH-3974c2cd-9ec4-4d03-82b1-9c993973e487";  // badilisha
 const SLUG = "AzamSport1";  // badilisha
 
+// LICENSE URL HAIJABADILIKA
+const FIXED_LICENSE_URL = "https://azy4sj9b.anycast.nagra.com/AZY4SJ9B/wvls/contentlicenseservice/v1/licenses";
+
 let player;
 let currentToken = "";
-let currentLicense = "";
 let currentMpd = "";
 
 // -------------------------------
-// Fetch Token + MPD from API
+// Fetch token/mpd from API
 // -------------------------------
 async function fetchStreamData() {
   const formData = new URLSearchParams();
@@ -42,22 +45,19 @@ async function fetchStreamData() {
       "Authorization": "Bearer " + BEARER_TOKEN,
       "Content-Type": "application/x-www-form-urlencoded"
     },
-    body: formData.toString()
+    body: formData
   });
 
   const data = await response.json();
 
   currentMpd = data.mpdUrl[0];
-  currentLicense = data.licenseUrl[0];
   currentToken = data.authXmlToken;
 
-  console.log("NEW TOKEN LOADED:", currentToken);
-
-  return data;
+  console.log("TOKEN UPDATED:", currentToken);
 }
 
 // -------------------------------
-// Init Player
+// Initialize Shaka Player
 // -------------------------------
 async function initPlayer() {
   const video = document.getElementById('video');
@@ -65,49 +65,39 @@ async function initPlayer() {
 
   await fetchStreamData();
 
-  // DRM Header
+  // Add DRM Token Header Every Time License Is Requested
   player.getNetworkingEngine().registerRequestFilter((type, request) => {
     if (type === shaka.net.NetworkingEngine.RequestType.LICENSE) {
-      request.headers['Authorization'] = 'Bearer ' + currentToken;
+      request.headers["Authorization"] = "Bearer " + currentToken;
     }
   });
 
+  // DRM CONFIG (fixed license URL)
   player.configure({
     drm: {
       servers: {
-        'com.widevine.alpha': currentLicense
+        'com.widevine.alpha': FIXED_LICENSE_URL
       }
     }
   });
 
   await player.load(currentMpd);
-  console.log("Stream loaded successfully!");
+  console.log("Stream loaded!");
 
-  // Start auto-refresh every 60 seconds
-  setInterval(refreshToken, 60000);
+  // Auto refresh token + mpd every 60 seconds
+  setInterval(refreshStream, 60000);
 }
 
 // -------------------------------
-// Refresh Token + MPD without stopping playback
+// Refresh Token Without Reloading Player
 // -------------------------------
-async function refreshToken() {
-  console.log("Refreshing token...");
-
+async function refreshStream() {
+  console.log("Refreshing stream info from API...");
   await fetchStreamData();
-
-  // Update DRM license URL (if changed)
-  player.configure({
-    drm: {
-      servers: {
-        'com.widevine.alpha': currentLicense
-      }
-    }
-  });
 }
 
-
-// -------------------------------
 document.addEventListener('DOMContentLoaded', initPlayer);
+
 </script>
 
 </body>
