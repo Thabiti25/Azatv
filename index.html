@@ -2,39 +2,113 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Live Channel Player</title>
-  <script src="https://cdn.dashjs.org/latest/dash.all.min.js"></script>
+  <title>Auto Refresh DRM Player</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/shaka-player.compiled.js"></script>
+  <style>
+    body { background:#111; margin:0; display:flex; align-items:center; justify-content:center; height:100vh; }
+    video { width:90%; background:black; }
+  </style>
 </head>
 <body>
-  <h2>Azam Sport 1</h2>
 
-  <video id="videoPlayer" controls autoplay width="720"></video>
+<video id="video" controls autoplay></video>
 
-  <script>
-    async function playChannel() {
-      const res = await fetch("http://localhost:3000/api/mpd", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          channelId: "CH-3974c2cd-9ec4-4d03-82b1-9c993973e487",
-          slug: "AzamSport1"
-        })
-      });
+<script>
 
-      const data = await res.json();
-      console.log("MPD Response:", data);
+// -------------------------------
+// API CONFIG
+// -------------------------------
+const API_URL = "https://app.swaxnet.xyz/api/mpd-url";
+const BEARER_TOKEN = "51b969b5ddee963de6c75686eb75adfd5709f31fd04335ee0a2654498868";
+const CHANNEL_ID = "CH-3974c2cd-9ec4-4d03-82b1-9c993973e487";  // badilisha
+const SLUG = "AzamSport1";  // badilisha
 
-      const mpdUrl = data?.mpdUrl?.[0];
-      if (!mpdUrl) {
-        alert("Hakuna MPD URL");
-        return;
-      }
+let player;
+let currentToken = "";
+let currentLicense = "";
+let currentMpd = "";
 
-      const player = dashjs.MediaPlayer().create();
-      player.initialize(document.getElementById("videoPlayer"), mpdUrl, true);
+// -------------------------------
+// Fetch Token + MPD from API
+// -------------------------------
+async function fetchStreamData() {
+  const formData = new URLSearchParams();
+  formData.append("channelId", CHANNEL_ID);
+  formData.append("slug", SLUG);
+
+  const response = await fetch(API_URL, {
+    method: "POST",
+    headers: {
+      "Authorization": "Bearer " + BEARER_TOKEN,
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: formData.toString()
+  });
+
+  const data = await response.json();
+
+  currentMpd = data.mpdUrl[0];
+  currentLicense = data.licenseUrl[0];
+  currentToken = data.authXmlToken;
+
+  console.log("NEW TOKEN LOADED:", currentToken);
+
+  return data;
+}
+
+// -------------------------------
+// Init Player
+// -------------------------------
+async function initPlayer() {
+  const video = document.getElementById('video');
+  player = new shaka.Player(video);
+
+  await fetchStreamData();
+
+  // DRM Header
+  player.getNetworkingEngine().registerRequestFilter((type, request) => {
+    if (type === shaka.net.NetworkingEngine.RequestType.LICENSE) {
+      request.headers['Authorization'] = 'Bearer ' + currentToken;
     }
+  });
 
-    playChannel();
-  </script>
+  player.configure({
+    drm: {
+      servers: {
+        'com.widevine.alpha': currentLicense
+      }
+    }
+  });
+
+  await player.load(currentMpd);
+  console.log("Stream loaded successfully!");
+
+  // Start auto-refresh every 60 seconds
+  setInterval(refreshToken, 60000);
+}
+
+// -------------------------------
+// Refresh Token + MPD without stopping playback
+// -------------------------------
+async function refreshToken() {
+  console.log("Refreshing token...");
+
+  await fetchStreamData();
+
+  // Update DRM license URL (if changed)
+  player.configure({
+    drm: {
+      servers: {
+        'com.widevine.alpha': currentLicense
+      }
+    }
+  });
+}
+
+
+// -------------------------------
+document.addEventListener('DOMContentLoaded', initPlayer);
+</script>
+
 </body>
 </html>
