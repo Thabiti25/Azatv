@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Auto Refresh DRM Player</title>
+  <title>AUTO Token Refresh Player</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/shaka-player.compiled.js"></script>
   <style>
     body { background:#111; margin:0; display:flex; align-items:center; justify-content:center; height:100vh; }
@@ -15,88 +15,95 @@
 
 <script>
 
-// -------------------------------
-// CONFIG
-// -------------------------------
+// --------------------------------
+// CONFIG ONLY — NOTHING HARD CODED
+// --------------------------------
 const API_URL = "https://app.swaxnet.xyz/api/mpd-url";
-const BEARER_TOKEN = "51b969b5ddee963de6c75686eb75adfd5709f31fd04335ee0a2654498868";
+const BEARER = "51b969b5ddee963de6c75686eb75adfd5709f31fd04335ee0a2654498868";
 
-const CHANNEL_ID = "CH-3974c2cd-9ec4-4d03-82b1-9c993973e487";  // badilisha
-const SLUG = "AzamSport1";  // badilisha
-
-// LICENSE URL HAIJABADILIKA
-const FIXED_LICENSE_URL = "https://azy4sj9b.anycast.nagra.com/AZY4SJ9B/wvls/contentlicenseservice/v1/licenses";
+const CHANNEL_ID = "CH-3974c2cd-9ec4-4d03-82b1-9c993973e487"; 
+const SLUG = "AzamSport1";
 
 let player;
-let currentToken = "";
-let currentMpd = "";
+let streamData = {};  // full API response (mpd, license, token)
 
-// -------------------------------
-// Fetch token/mpd from API
-// -------------------------------
-async function fetchStreamData() {
-  const formData = new URLSearchParams();
-  formData.append("channelId", CHANNEL_ID);
-  formData.append("slug", SLUG);
 
-  const response = await fetch(API_URL, {
-    method: "POST",
-    headers: {
-      "Authorization": "Bearer " + BEARER_TOKEN,
-      "Content-Type": "application/x-www-form-urlencoded"
-    },
-    body: formData
-  });
+// --------------------------------
+// FUNCTION TO FETCH STREAM DATA
+// --------------------------------
+async function loadFromAPI() {
+    const formData = new URLSearchParams();
+    formData.append("channelId", CHANNEL_ID);
+    formData.append("slug", SLUG);
 
-  const data = await response.json();
+    const res = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+            "Authorization": "Bearer " + BEARER,
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: formData
+    });
 
-  currentMpd = data.mpdUrl[0];
-  currentToken = data.authXmlToken;
+    streamData = await res.json();
 
-  console.log("TOKEN UPDATED:", currentToken);
+    console.log("UPDATED DATA FROM API:", streamData);
 }
 
-// -------------------------------
+
+// --------------------------------
 // Initialize Shaka Player
-// -------------------------------
+// --------------------------------
 async function initPlayer() {
-  const video = document.getElementById('video');
-  player = new shaka.Player(video);
+    const video = document.getElementById("video");
+    player = new shaka.Player(video);
 
-  await fetchStreamData();
+    // Get initial stream info
+    await loadFromAPI();
 
-  // Add DRM Token Header Every Time License Is Requested
-  player.getNetworkingEngine().registerRequestFilter((type, request) => {
-    if (type === shaka.net.NetworkingEngine.RequestType.LICENSE) {
-      request.headers["Authorization"] = "Bearer " + currentToken;
-    }
-  });
+    // Attach DRM token automatically
+    player.getNetworkingEngine().registerRequestFilter((type, request) => {
+        if (type === shaka.net.NetworkingEngine.RequestType.LICENSE) {
+            request.headers["Authorization"] = "Bearer " + streamData.authXmlToken;
+        }
+    });
 
-  // DRM CONFIG (fixed license URL)
-  player.configure({
-    drm: {
-      servers: {
-        'com.widevine.alpha': FIXED_LICENSE_URL
-      }
-    }
-  });
+    // DRM + LICENSE URL FROM API
+    player.configure({
+        drm: {
+            servers: {
+                "com.widevine.alpha": streamData.licenseUrl[0]
+            }
+        }
+    });
 
-  await player.load(currentMpd);
-  console.log("Stream loaded!");
+    // Load MPD from API
+    await player.load(streamData.mpdUrl[0]);
 
-  // Auto refresh token + mpd every 60 seconds
-  setInterval(refreshStream, 60000);
+    console.log("Stream Loaded!");
+    
+    // Start auto-refresh every 60 seconds
+    setInterval(refreshData, 60000);
 }
 
-// -------------------------------
-// Refresh Token Without Reloading Player
-// -------------------------------
-async function refreshStream() {
-  console.log("Refreshing stream info from API...");
-  await fetchStreamData();
+
+// --------------------------------
+// AUTO REFRESH DATA — NO RELOAD
+// --------------------------------
+async function refreshData() {
+    console.log("AUTO REFRESHING TOKEN & MPD FROM API...");
+
+    await loadFromAPI();
+
+    // Update DRM token
+    player.getConfiguration().drm.servers["com.widevine.alpha"] = streamData.licenseUrl[0];
+
+    console.log("Token & License Updated.");
 }
 
-document.addEventListener('DOMContentLoaded', initPlayer);
+
+// --------------------------------
+document.addEventListener("DOMContentLoaded", initPlayer);
 
 </script>
 
