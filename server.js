@@ -6,6 +6,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(express.static('public')); // serve index.html
 
 // === Proxy MPD Request ===
 app.post('/api/mpd', async (req, res) => {
@@ -20,7 +21,12 @@ app.post('/api/mpd', async (req, res) => {
       body: new URLSearchParams({ channelId, slug })
     });
     const data = await response.json();
-    res.json(data); // forward to browser
+    // Forward mpdUrl, licenseUrl, authXmlToken
+    res.json({
+      mpdUrl: data.mpdUrl[0],
+      licenseUrl: data.licenseUrl[0],
+      authXmlToken: data.authXmlToken
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch MPD' });
@@ -30,15 +36,14 @@ app.post('/api/mpd', async (req, res) => {
 // === Proxy License Request ===
 app.post('/api/license', async (req, res) => {
   try {
-    const licenseUrl = 'https://azy4sj9b.anycast.nagra.com/AZY4SJ9B/wvls/contentlicenseservice/v1/licenses';
-    const body = req.body; // license request from browser
+    const { licenseUrl, authXmlToken, body: licenseBody } = req.body;
     const response = await fetch(licenseUrl, {
       method: 'POST',
       headers: {
-        'Authorization': 'Bearer 51b969b5ddee963de6c75686eb75adfd5709f31fd04335ee0a2654498868',
+        'Authorization': `Bearer ${authXmlToken}`,
         'Content-Type': 'application/octet-stream'
       },
-      body
+      body: licenseBody
     });
     const buffer = await response.arrayBuffer();
     res.set('Content-Type', 'application/octet-stream');
