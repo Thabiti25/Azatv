@@ -8,25 +8,32 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public')); // serve index.html
 
-// === Proxy MPD Request ===
+// === Proxy MPD Request (x-www-form-urlencoded) ===
 app.post('/api/mpd', async (req, res) => {
   const { channelId, slug } = req.body;
   try {
+    const formData = new URLSearchParams();
+    formData.append('channelId', channelId);
+    formData.append('slug', slug);
+
     const response = await fetch('https://app.swaxnet.xyz/api/mpd-url', {
       method: 'POST',
       headers: {
         'Authorization': 'Bearer 51b969b5ddee963de6c75686eb75adfd5709f31fd04335ee0a2654498868',
         'Content-Type': 'application/x-www-form-urlencoded'
       },
-      body: new URLSearchParams({ channelId, slug })
+      body: formData.toString()
     });
+
     const data = await response.json();
-    // Forward mpdUrl, licenseUrl, authXmlToken
+
+    // Forward mpdUrl, licenseUrl, authXmlToken to browser
     res.json({
       mpdUrl: data.mpdUrl[0],
       licenseUrl: data.licenseUrl[0],
       authXmlToken: data.authXmlToken
     });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch MPD' });
