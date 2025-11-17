@@ -2,102 +2,39 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>SwaxNet Web Player</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.8/shaka-player.compiled.js"></script>
-  <style>
-    body { background:#111; color:white; font-family:Arial; padding:20px; }
-    video { width:100%; height:auto; border-radius:10px; background:black; }
-    #status { margin-top:10px; color:#ccc; }
-    .card { margin-bottom:10px; }
-    input, button { padding:10px; margin-top:5px; width:100%; border-radius:8px; }
-    button { background:#007bff; color:white; border:none; cursor:pointer; }
-    button:hover { background:#0056cc; }
-  </style>
+  <title>Live Channel Player</title>
+  <script src="https://cdn.dashjs.org/latest/dash.all.min.js"></script>
 </head>
 <body>
+  <h2>Azam Sport 1</h2>
 
-<h2>SwaxNet Live Web Player</h2>
+  <video id="videoPlayer" controls autoplay width="720"></video>
 
-<div class="card">
-  <label>Channel ID</label>
-  <input id="channelId" value="CH-3974c2cd-9ec4-4d03-82b1-9c993973e487">
-  <label>Slug</label>
-  <input id="slug" value="AzamSport1">
-  <button onclick="startPlayer()">PLAY</button>
-</div>
+  <script>
+    async function playChannel() {
+      const res = await fetch("http://localhost:3000/api/mpd", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channelId: "CH-3974c2cd-9ec4-4d03-82b1-9c993973e487",
+          slug: "AzamSport1"
+        })
+      });
 
-<video id="video" controls autoplay></video>
-<div id="status">Status: idle</div>
+      const data = await res.json();
+      console.log("MPD Response:", data);
 
-<script>
-let player;
-let refreshInterval;
-let currentData = {};
-
-async function fetchMPD() {
-  const channelId = document.getElementById("channelId").value;
-  const slug = document.getElementById("slug").value;
-  const res = await fetch('/api/mpd', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ channelId, slug })
-  });
-  const data = await res.json();
-  currentData = data; // store licenseUrl + authXmlToken
-  return data.mpdUrl;
-}
-
-async function startPlayer() {
-  const video = document.getElementById('video');
-  const statusEl = document.getElementById('status');
-  statusEl.textContent = 'Status: loading...';
-  video.preload = 'auto';
-  video.playsInline = true;
-  video.autoplay = true;
-
-  if (!player) {
-    player = new shaka.Player(video);
-
-    player.configure({
-      drm: { servers: { "com.widevine.alpha": '/api/license' } },
-      streaming: { bufferingGoal:30, rebufferingGoal:15, smallGapLimit:0.5 },
-      abr: { enabled:true }
-    });
-
-    player.getNetworkingEngine().registerRequestFilter((type, request) => {
-      if (type === shaka.net.NetworkingEngine.RequestType.LICENSE) {
-        request.headers['Authorization'] = 'Bearer ' + currentData.authXmlToken;
-        request.headers['Content-Type'] = 'application/octet-stream';
-        request.uris = [currentData.licenseUrl]; 
+      const mpdUrl = data?.mpdUrl?.[0];
+      if (!mpdUrl) {
+        alert("Hakuna MPD URL");
+        return;
       }
-    });
 
-    video.addEventListener('waiting', ()=>statusEl.textContent='Status: buffering...');
-    video.addEventListener('playing', ()=>statusEl.textContent='Status: playing');
-    player.addEventListener('error', e=>{console.error(e.detail); statusEl.textContent='Status: error';});
-  }
+      const player = dashjs.MediaPlayer().create();
+      player.initialize(document.getElementById("videoPlayer"), mpdUrl, true);
+    }
 
-  try {
-    const mpdUrl = await fetchMPD();
-    await player.load(mpdUrl);
-    console.log('Playing:', mpdUrl);
-    statusEl.textContent = 'Status: playing';
-
-    if(refreshInterval) clearInterval(refreshInterval);
-    refreshInterval = setInterval(async ()=>{
-      try{
-        const newMPD = await fetchMPD();
-        await player.load(newMPD);
-        console.log('Refreshed MPD:', newMPD);
-      } catch(e){ console.error('Refresh failed', e); }
-    }, 45000); // adjust based on token expiry
-
-  } catch(e){
-    console.error('Failed to load stream', e);
-    statusEl.textContent = 'Status: error';
-  }
-}
-</script>
-
+    playChannel();
+  </script>
 </body>
 </html>
