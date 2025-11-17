@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>SwaxNet Dynamic Web Player</title>
+  <title>SwaxNet Web Player</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.8/shaka-player.compiled.js"></script>
   <style>
     body { background:#111; color:white; font-family:Arial; padding:20px; }
@@ -68,7 +68,6 @@ async function startPlayer() {
       if (type === shaka.net.NetworkingEngine.RequestType.LICENSE) {
         request.headers['Authorization'] = 'Bearer ' + currentData.authXmlToken;
         request.headers['Content-Type'] = 'application/octet-stream';
-        // send license request body to server
         request.uris = [currentData.licenseUrl]; 
       }
     });
