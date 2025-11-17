@@ -2,22 +2,22 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>SwaxNet Live Player</title>
+  <title>SwaxNet DRM Live Player</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.8/shaka-player.compiled.js"></script>
 
   <style>
-    body { background:#111; color:white; font-family:Arial; padding:20px; }
-    .card { background:#1d1d1d; padding:15px; border-radius:10px; margin-bottom:20px; }
-    input, button { padding:10px; width:100%; border-radius:8px; margin-top:8px; }
+    body { background:#111; color:white; padding:20px; font-family:Arial; }
+    .card { background:#1d1d1d; padding:15px; border-radius:8px; margin-bottom:15px; }
+    input, button { padding:10px; width:100%; border-radius:8px; margin-top:10px; }
     button { background:#007bff; border:none; color:white; cursor:pointer; }
-    button:hover { background:#0060cc; }
-    video { width:100%; margin-top:20px; background:black; border-radius:10px; }
+    button:hover { background:#0056cc; }
+    video { width:100%; margin-top:20px; border-radius:10px; background:black; }
   </style>
 </head>
 
 <body>
 
-  <h2>SwaxNet Live Player</h2>
+  <h2>SwaxNet DRM Live Player</h2>
 
   <div class="card">
     <label>Channel ID</label>
@@ -26,58 +26,81 @@
     <label>Slug</label>
     <input id="slug" value="AzamSport1">
 
-    <button onclick="loadStream()">Play Channel</button>
+    <button onclick="playStream()">PLAY CHANNEL</button>
   </div>
 
   <video id="video" controls autoplay></video>
 
-  <script>
-    async function loadStream() {
-      const apiUrl = "https://app.swaxnet.xyz/api/mpd-url";
+<script>
+async function playStream() {
+  const apiUrl = "https://app.swaxnet.xyz/api/mpd-url";
 
-      const channelId = document.getElementById("channelId").value;
-      const slug = document.getElementById("slug").value;
+  const channelId = document.getElementById("channelId").value;
+  const slug = document.getElementById("slug").value;
 
-      const formData = new URLSearchParams();
-      formData.append("channelId", channelId);
-      formData.append("slug", slug);
+  const formData = new URLSearchParams();
+  formData.append("channelId", channelId);
+  formData.append("slug", slug);
 
-      let response = await fetch(apiUrl, {
-        method: "POST",
-        headers: {
-          "Authorization": "Bearer 51b969b5ddee963de6c75686eb75adfd5709f31fd04335ee0a2654498868",
-          "Content-Type": "application/x-www-form-urlencoded"
-        },
-        body: formData.toString()
-      });
+  let response = await fetch(apiUrl, {
+    method: "POST",
+    headers: {
+      "Authorization": "Bearer 51b969b5ddee963de6c75686eb75adfd5709f31fd04335ee0a2654498868",
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: formData.toString()
+  });
 
-      const data = await response.json();
-      console.log("API Response:", data);
+  const data = await response.json();
+  console.log("API Response:", data);
 
-      const mpdUrl =
-        data.mpdUrl ||
-        data.url ||
-        data.stream ||
-        data.source ||
-        (data.data && data.data.mpdUrl) ||
-        null;
+  const mpdUrl =
+    data.mpdUrl ||
+    data.url ||
+    data.stream ||
+    data.source ||
+    (data.data && data.data.mpdUrl) ||
+    null;
 
-      if (!mpdUrl) {
-        alert("API IMERUDI BILA MPD URL. Angalia response kwenye console.");
-        return;
-      }
+  if (!mpdUrl) {
+    alert("API haikurudisha MPD URL. Angalia console.");
+    return;
+  }
 
-      const video = document.getElementById("video");
-      const player = new shaka.Player(video);
+  const video = document.getElementById("video");
+  const player = new shaka.Player(video);
 
-      try {
-        await player.load(mpdUrl);
-        console.log("Playing:", mpdUrl);
-      } catch (err) {
-        console.error("Shaka Load Error:", err);
+  // === DRM CONFIGURATION (VERY IMPORTANT) ===
+  player.configure({
+    drm: {
+      servers: {
+        "com.widevine.alpha":
+          "https://azy4sj9b.anycast.nagra.com/AZY4SJ9B/wvls/contentlicenseservice/v1/licenses"
+      },
+      advanced: {
+        "com.widevine.alpha": {
+          "serverCertificate": null
+        }
       }
     }
-  </script>
+  });
+
+  player.getNetworkingEngine().registerRequestFilter((type, request) => {
+    if (type === shaka.net.NetworkingEngine.RequestType.LICENSE) {
+      request.headers["Authorization"] =
+        "Bearer 51b969b5ddee963de6c75686eb75adfd5709f31fd04335ee0a2654498868";
+      request.headers["Content-Type"] = "application/octet-stream";
+    }
+  });
+
+  try {
+    await player.load(mpdUrl);
+    console.log("Playing:", mpdUrl);
+  } catch (err) {
+    console.error("Shaka Player Error:", err);
+  }
+}
+</script>
 
 </body>
 </html>
